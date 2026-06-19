@@ -7,6 +7,44 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Study Tracker">
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     FIREBASE CONFIGURATION
+     Replace the placeholder values below with your own Firebase project
+     settings from: Firebase Console → Project Settings → Your apps → Web
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp }                     from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getAuth, GoogleAuthProvider,
+           signInWithPopup, signOut,
+           onAuthStateChanged }                from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import { getFirestore, doc,
+           getDoc, setDoc }                    from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  // ── PASTE YOUR CONFIG HERE ─────────────────────────────────────────────
+  const firebaseConfig = {
+  apiKey: "AIzaSyDI_b4xE9q9LuSPxT3-QwM1hp3baVdPXew",
+  authDomain: "study-tracker-94224.firebaseapp.com",
+  projectId: "study-tracker-94224",
+  storageBucket: "study-tracker-94224.firebasestorage.app",
+  messagingSenderId: "1071762205150",
+  appId: "1:1071762205150:web:ff286838ced38d81a1554f"
+};
+  // ──────────────────────────────────────────────────────────────────────
+
+  const app      = initializeApp(firebaseConfig);
+  const auth     = getAuth(app);
+  const db       = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  // Expose to the classic script below
+  window._FB = { auth, db, provider,
+                 signInWithPopup, signOut, onAuthStateChanged,
+                 doc, getDoc, setDoc };
+  window.dispatchEvent(new Event('fb-ready'));
+</script>
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
 <style>
 :root {
   --bg:#0C0C0C; --surface:#141414; --surface2:#1C1C1C; --surface3:#242424;
@@ -26,6 +64,67 @@ body{
   position:fixed;top:0;left:0;right:0;bottom:0;
 }
 @media (min-width:430px){body{left:50%;right:auto;transform:translateX(-50%);width:430px;}}
+
+/* ── LOADING SCREEN ──────────────────────────────────────────────────── */
+#loading-screen{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  flex:1;gap:16px;
+}
+.spinner{
+  width:36px;height:36px;border:3px solid var(--border2);
+  border-top-color:var(--amber);border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-lbl{font-size:13px;color:var(--text3);}
+
+/* ── AUTH SCREEN ─────────────────────────────────────────────────────── */
+#auth-screen{
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  flex:1;padding:32px 28px;
+}
+.auth-logo{font-size:44px;margin-bottom:14px;}
+.auth-title{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px;text-align:center;}
+.auth-sub{font-size:13px;color:var(--text3);text-align:center;line-height:1.65;margin-bottom:36px;}
+.btn-google{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  width:100%;padding:15px 20px;
+  background:#fff;color:#1a1a1a;border:none;
+  border-radius:12px;font-size:15px;font-weight:600;
+  cursor:pointer;touch-action:manipulation;-webkit-appearance:none;
+  transition:opacity .15s;
+}
+.btn-google:active{opacity:.8;}
+.btn-google svg{width:20px;height:20px;flex-shrink:0;}
+.auth-note{font-size:11px;color:var(--text3);text-align:center;margin-top:18px;line-height:1.6;}
+.auth-err{font-size:12px;color:var(--red);text-align:center;margin-top:12px;min-height:18px;}
+
+/* ── USER BADGE ──────────────────────────────────────────────────────── */
+#user-badge{
+  position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;
+  display:flex;align-items:center;gap:8px;z-index:200;
+}
+#user-avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:var(--surface2);border:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:var(--amber);
+  cursor:pointer;touch-action:manipulation;overflow:hidden;flex-shrink:0;
+}
+#user-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;}
+#signout-btn{
+  background:var(--surface2);border:1px solid var(--border2);color:var(--text2);
+  border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;
+  cursor:pointer;touch-action:manipulation;-webkit-appearance:none;
+  display:none;
+}
+#signout-btn.vis{display:block;}
+#signout-btn:active{opacity:.7;}
+
+/* ── MAIN APP ────────────────────────────────────────────────────────── */
+#main-app{display:none;flex-direction:column;flex:1;min-height:0;}
+#main-app.vis{display:flex;}
+
 #app{
   flex:1;overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
@@ -49,8 +148,7 @@ body{
   flex:1;padding:8px 4px;background:none;border:none;
   display:flex;flex-direction:column;align-items:center;gap:4px;
   color:var(--text3);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  border-radius:10px;cursor:pointer;
-  touch-action:manipulation;-webkit-appearance:none;
+  border-radius:10px;cursor:pointer;touch-action:manipulation;-webkit-appearance:none;
 }
 .tab-btn svg{width:20px;height:20px;display:block;}
 .tab-btn.active{color:var(--amber);background:rgba(232,180,75,.08);}
@@ -208,158 +306,196 @@ svg.linechart,svg.heatmap{width:100%;display:block;}
 </head>
 <body>
 
-<div id="app">
+<!-- LOADING -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div class="loading-lbl">Loading…</div>
+</div>
 
-<!-- TIMER PAGE -->
-<div class="page active" id="page-timer">
-  <div class="page-header">
-    <div class="page-title" id="hdr-date">Study Timer</div>
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div class="auth-logo">📚</div>
+  <div class="auth-title">Study Tracker</div>
+  <div class="auth-sub">Sign in to keep your sessions safe and synced across all your devices.</div>
+  <button class="btn-google" id="btn-google-signin">
+    <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
+    Continue with Google
+  </button>
+  <div class="auth-err" id="auth-err"></div>
+  <div class="auth-note">Your data is private — only you can see your sessions.</div>
+</div>
+
+<!-- MAIN APP (revealed after sign-in) -->
+<div id="main-app">
+
+  <div id="user-badge">
+    <div id="user-avatar"></div>
+    <button id="signout-btn">Sign out</button>
   </div>
-  <div class="timer-hero">
-    <div class="goal-eyebrow" id="eyebrow">
-      Goal
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-    </div>
-    <div class="goal-title ph" id="goal-title">Tap to set your goal…</div>
-    <div class="ring-wrap">
-      <svg class="ring-svg" viewBox="0 0 230 230" xmlns="http://www.w3.org/2000/svg">
-        <circle class="ring-track" cx="115" cy="115" r="105"/>
-        <circle class="ring-prog" id="ring-prog" cx="115" cy="115" r="105"/>
-      </svg>
-      <div class="ring-inner">
-        <div class="sdot-row"><div class="sdot" id="sdot"></div><span class="slabel" id="slabel">Ready</span></div>
-        <div class="clock" id="clock">00:00:00</div>
-        <div class="clock-ms" id="clock-ms">.00</div>
-        <div class="ring-lbl" id="ring-lbl">— / 8h goal</div>
+
+  <div id="app">
+
+    <!-- TIMER PAGE -->
+    <div class="page active" id="page-timer">
+      <div class="page-header">
+        <div class="page-title" id="hdr-date">Study Timer</div>
+      </div>
+      <div class="timer-hero">
+        <div class="goal-eyebrow" id="eyebrow">
+          Goal
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </div>
+        <div class="goal-title ph" id="goal-title">Tap to set your goal…</div>
+        <div class="ring-wrap">
+          <svg class="ring-svg" viewBox="0 0 230 230" xmlns="http://www.w3.org/2000/svg">
+            <circle class="ring-track" cx="115" cy="115" r="105"/>
+            <circle class="ring-prog" id="ring-prog" cx="115" cy="115" r="105"/>
+          </svg>
+          <div class="ring-inner">
+            <div class="sdot-row"><div class="sdot" id="sdot"></div><span class="slabel" id="slabel">Ready</span></div>
+            <div class="clock" id="clock">00:00:00</div>
+            <div class="clock-ms" id="clock-ms">.00</div>
+            <div class="ring-lbl" id="ring-lbl">— / 8h goal</div>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="btn-start" id="btn-start">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Start
+        </button>
+        <button class="btn-stop" id="btn-stop" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Pause
+        </button>
+        <button class="btn-reset" id="btn-reset" title="Reset">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+      </div>
+      <button class="btn-log" id="btn-log">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9l20-7z"/></svg>
+        Log this session
+      </button>
+      <div class="session-row">
+        <div class="chip"><div class="chip-lbl">Session</div><div class="chip-val" id="chip-time">–</div></div>
+        <div class="chip"><div class="chip-lbl">Status</div><div class="chip-val" id="chip-status">Not started</div></div>
+      </div>
+      <div class="quote-strip">
+        <div class="quote-text" id="quote-text"></div>
+        <div class="quote-author" id="quote-author"></div>
       </div>
     </div>
-  </div>
-  <div class="controls">
-    <button class="btn-start" id="btn-start">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Start
-    </button>
-    <button class="btn-stop" id="btn-stop" disabled>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Pause
-    </button>
-    <button class="btn-reset" id="btn-reset" title="Reset">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-    </button>
-  </div>
-  <button class="btn-log" id="btn-log">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9l20-7z"/></svg>
-    Log this session
-  </button>
-  <div class="session-row">
-    <div class="chip"><div class="chip-lbl">Session</div><div class="chip-val" id="chip-time">–</div></div>
-    <div class="chip"><div class="chip-lbl">Status</div><div class="chip-val" id="chip-status">Not started</div></div>
-  </div>
-  <div class="quote-strip">
-    <div class="quote-text" id="quote-text"></div>
-    <div class="quote-author" id="quote-author"></div>
-  </div>
-</div>
 
-<!-- DASHBOARD PAGE -->
-<div class="page" id="page-dash">
-  <div class="page-header"><div class="page-title">Dashboard</div><div class="page-sub">Your study overview</div></div>
-  <div class="stat-grid">
-    <div class="stat-card"><div class="stat-val" id="lt-total">—</div><div class="stat-lbl">Lifetime hours</div></div>
-    <div class="stat-card"><div class="stat-val neu" id="lt-days">—</div><div class="stat-lbl">Days logged</div></div>
-  </div>
-  <div class="best-strip" id="best-strip" style="display:none">
-    <div class="best-icon">🏆</div>
-    <div><div class="best-lbl">Personal best day</div><div class="best-val" id="best-val">—</div></div>
-  </div>
-  <div class="wk-stats">
-    <div class="wk-stat"><div class="wk-val" id="wk-avg">–</div><div class="wk-lbl">Week avg</div></div>
-    <div class="wk-stat"><div class="wk-val hi" id="wk-high">–</div><div class="wk-lbl">Week high</div></div>
-    <div class="wk-stat"><div class="wk-val" id="wk-low">–</div><div class="wk-lbl">Week low</div></div>
-  </div>
-  <div class="view-toggle">
-    <button class="vbtn active" id="vbtn-week">Weekly</button>
-    <button class="vbtn" id="vbtn-month">Monthly</button>
-  </div>
-  <div class="chart-card">
-    <div class="chart-hdr">
-      <div class="chart-title" id="chart-title">Hours per day</div>
-      <div class="chart-nav" id="chart-nav" style="display:none">
-        <button class="cnav-btn" id="cnav-prev">&#8249;</button>
-        <div class="cnav-lbl" id="cnav-lbl"></div>
-        <button class="cnav-btn" id="cnav-next">&#8250;</button>
+    <!-- DASHBOARD PAGE -->
+    <div class="page" id="page-dash">
+      <div class="page-header"><div class="page-title">Dashboard</div><div class="page-sub">Your study overview</div></div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-val" id="lt-total">—</div><div class="stat-lbl">Lifetime hours</div></div>
+        <div class="stat-card"><div class="stat-val neu" id="lt-days">—</div><div class="stat-lbl">Days logged</div></div>
+      </div>
+      <div class="best-strip" id="best-strip" style="display:none">
+        <div class="best-icon">🏆</div>
+        <div><div class="best-lbl">Personal best day</div><div class="best-val" id="best-val">—</div></div>
+      </div>
+      <div class="wk-stats">
+        <div class="wk-stat"><div class="wk-val" id="wk-avg">–</div><div class="wk-lbl">Week avg</div></div>
+        <div class="wk-stat"><div class="wk-val hi" id="wk-high">–</div><div class="wk-lbl">Week high</div></div>
+        <div class="wk-stat"><div class="wk-val" id="wk-low">–</div><div class="wk-lbl">Week low</div></div>
+      </div>
+      <div class="view-toggle">
+        <button class="vbtn active" id="vbtn-week">Weekly</button>
+        <button class="vbtn" id="vbtn-month">Monthly</button>
+      </div>
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <div class="chart-title" id="chart-title">Hours per day</div>
+          <div class="chart-nav" id="chart-nav" style="display:none">
+            <button class="cnav-btn" id="cnav-prev">&#8249;</button>
+            <div class="cnav-lbl" id="cnav-lbl"></div>
+            <button class="cnav-btn" id="cnav-next">&#8250;</button>
+          </div>
+        </div>
+        <div class="chart-wrap" id="chart-wrap">
+          <div class="empty"><div class="empty-icon">📈</div>Log a session to see your chart</div>
+        </div>
+        <div class="hm-legend" id="hm-legend" style="display:none">
+          <span>Less</span>
+          <div class="legend-cells">
+            <div class="lc" style="background:#1C1C1C"></div>
+            <div class="lc" style="background:#2a2010"></div>
+            <div class="lc" style="background:#5a4010"></div>
+            <div class="lc" style="background:#9a7020"></div>
+            <div class="lc" style="background:#E8B44B"></div>
+          </div>
+          <span>More</span>
+        </div>
+      </div>
+      <div class="sec-label">This week</div>
+      <div id="log-list"></div>
+      <div class="share-row">
+        <button class="btn-share" id="btn-share-today">
+          <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
+          Today
+        </button>
+        <button class="btn-share" id="btn-share-week">
+          <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
+          This week
+        </button>
       </div>
     </div>
-    <div class="chart-wrap" id="chart-wrap">
-      <div class="empty"><div class="empty-icon">📈</div>Log a session to see your chart</div>
-    </div>
-    <div class="hm-legend" id="hm-legend" style="display:none">
-      <span>Less</span>
-      <div class="legend-cells">
-        <div class="lc" style="background:#1C1C1C"></div>
-        <div class="lc" style="background:#2a2010"></div>
-        <div class="lc" style="background:#5a4010"></div>
-        <div class="lc" style="background:#9a7020"></div>
-        <div class="lc" style="background:#E8B44B"></div>
+
+    <!-- SETTINGS PAGE -->
+    <div class="page" id="page-settings">
+      <div class="page-header"><div class="page-title">Settings</div><div class="page-sub">Personalise &amp; configure</div></div>
+      <div class="set-card">
+        <div class="set-title">Account</div>
+        <div class="set-desc" id="user-info-card">—</div>
       </div>
-      <span>More</span>
+      <div class="set-card">
+        <div class="set-title">Goal title</div>
+        <div class="set-desc">Shown above the timer as a constant reminder of what you're working toward.</div>
+        <div class="igroup"><div class="ilabel">Title</div><input class="ifield" type="text" id="title-input" placeholder="e.g. CA Final Prep" maxlength="60" autocomplete="off" autocorrect="off"></div>
+        <button class="btn-save" id="btn-save-title">Save title</button>
+      </div>
+      <div class="set-card">
+        <div class="set-title">Daily goal</div>
+        <div class="set-desc">The amber ring fills as you log hours. Set your daily target.</div>
+        <div class="igroup"><div class="ilabel">Hours (1–16)</div><input class="ifield" type="number" id="goal-input" placeholder="8" min="1" max="16" inputmode="numeric" autocomplete="off"></div>
+        <button class="btn-save" id="btn-save-goal">Save goal</button>
+      </div>
+      <div class="set-card">
+        <div class="set-title">Password</div>
+        <div class="set-desc">Protects Reset and Log Session from accidental use.</div>
+        <div class="igroup"><div class="ilabel">New password</div><input class="ifield" type="password" id="new-pass" placeholder="Enter new password" autocomplete="new-password"></div>
+        <div class="igroup"><div class="ilabel">Confirm</div><input class="ifield" type="password" id="confirm-pass" placeholder="Confirm password" autocomplete="new-password"></div>
+        <div class="merr" id="pass-set-err"></div>
+        <button class="btn-save" id="btn-save-pass">Save password</button>
+      </div>
+      <div class="set-card">
+        <div class="set-title">Status</div>
+        <div class="set-desc" id="pass-status">No password set — all actions are open.</div>
+      </div>
     </div>
-  </div>
-  <div class="sec-label">This week</div>
-  <div id="log-list"></div>
-  <div class="share-row">
-    <button class="btn-share" id="btn-share-today">
-      <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
-      Today
+
+  </div><!-- /app -->
+
+  <!-- TAB BAR -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-timer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Timer
     </button>
-    <button class="btn-share" id="btn-share-week">
-      <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
-      This week
+    <button class="tab-btn" id="tab-dash">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Stats
+    </button>
+    <button class="tab-btn" id="tab-settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 0 1 21.54 9.5L19 10a7 7 0 0 0-.29-1M4.93 4.93A10 10 0 0 0 2.46 9.5L5 10a7 7 0 0 1 .29-1M4.93 19.07A10 10 0 0 0 9.5 21.54L10 19a7 7 0 0 1-1-.29M19.07 19.07A10 10 0 0 1 14.5 21.54L14 19a7 7 0 0 0 1-.29"/></svg>Settings
     </button>
   </div>
-</div>
 
-<!-- SETTINGS PAGE -->
-<div class="page" id="page-settings">
-  <div class="page-header"><div class="page-title">Settings</div><div class="page-sub">Personalise &amp; configure</div></div>
-  <div class="set-card">
-    <div class="set-title">Goal title</div>
-    <div class="set-desc">Shown above the timer as a constant reminder of what you're working toward.</div>
-    <div class="igroup"><div class="ilabel">Title</div><input class="ifield" type="text" id="title-input" placeholder="e.g. CA Final Prep" maxlength="60" autocomplete="off" autocorrect="off"></div>
-    <button class="btn-save" id="btn-save-title">Save title</button>
-  </div>
-  <div class="set-card">
-    <div class="set-title">Daily goal</div>
-    <div class="set-desc">The amber ring fills as you log hours. Set your daily target.</div>
-    <div class="igroup"><div class="ilabel">Hours (1–16)</div><input class="ifield" type="number" id="goal-input" placeholder="8" min="1" max="16" inputmode="numeric" autocomplete="off"></div>
-    <button class="btn-save" id="btn-save-goal">Save goal</button>
-  </div>
-  <div class="set-card">
-    <div class="set-title">Password</div>
-    <div class="set-desc">Protects Reset and Log Session from accidental use.</div>
-    <div class="igroup"><div class="ilabel">New password</div><input class="ifield" type="password" id="new-pass" placeholder="Enter new password" autocomplete="new-password"></div>
-    <div class="igroup"><div class="ilabel">Confirm</div><input class="ifield" type="password" id="confirm-pass" placeholder="Confirm password" autocomplete="new-password"></div>
-    <div class="merr" id="pass-set-err"></div>
-    <button class="btn-save" id="btn-save-pass">Save password</button>
-  </div>
-  <div class="set-card">
-    <div class="set-title">Status</div>
-    <div class="set-desc" id="pass-status">No password set — all actions are open.</div>
-  </div>
-</div>
-
-</div><!-- /app -->
-
-<!-- TAB BAR -->
-<div class="tab-bar">
-  <button class="tab-btn active" id="tab-timer">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Timer
-  </button>
-  <button class="tab-btn" id="tab-dash">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Stats
-  </button>
-  <button class="tab-btn" id="tab-settings">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 0 1 21.54 9.5L19 10a7 7 0 0 0-.29-1M4.93 4.93A10 10 0 0 0 2.46 9.5L5 10a7 7 0 0 1 .29-1M4.93 19.07A10 10 0 0 0 9.5 21.54L10 19a7 7 0 0 1-1-.29M19.07 19.07A10 10 0 0 1 14.5 21.54L14 19a7 7 0 0 0 1-.29"/></svg>Settings
-  </button>
-</div>
+</div><!-- /main-app -->
 
 <!-- RESET MODAL -->
 <div class="overlay" id="ov-reset">
@@ -436,32 +572,88 @@ svg.linechart,svg.heatmap{width:100%;display:block;}
 <div class="toast" id="toast"></div>
 
 <script>
-// SAFE STORAGE
-var S=(function(){
-  try{localStorage.setItem('_t','1');localStorage.removeItem('_t');return localStorage;}
-  catch(e){var m={};return{getItem:function(k){return m[k]!==undefined?m[k]:null;},setItem:function(k,v){m[k]=String(v);},removeItem:function(k){delete m[k];}};}
-})();
+// ═══════════════════════════════════════════════════════════════════════════
+//  FIREBASE-BACKED STUDY TRACKER
+//
+//  Firestore data shape (per user):
+//    users/{uid}/data/profile  →  { title, goalH, pw,
+//                                   timerElapsed, timerRunning, timerTs }
+//    users/{uid}/data/sessions →  { sessions: [ {day,hours,ts}, … ] }
+//
+//  All localStorage references have been removed.
+//  Every write goes directly to Firestore via saveProfile() / saveSessions().
+// ═══════════════════════════════════════════════════════════════════════════
 
-// STATE
-var elapsed=0,tsStart=null,running=false,raf=null,wl=null;
-var pw=S.getItem('sw_pw')||'';
-var sessions=JSON.parse(S.getItem('sw_sessions')||'[]');
-var goalTitle=S.getItem('sw_title')||'';
-var goalH=parseFloat(S.getItem('sw_goal')||'8');
-var selDay=null,curView='week',moOff=0;
-var DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-var CIRC=2*Math.PI*105;
+var FB = null;           // window._FB – set once the module fires 'fb-ready'
+var currentUser = null;
+var appBooted   = false;
 
-// RESTORE TIMER
-(function(){
-  var e=parseFloat(S.getItem('sw_e')||'0');
-  var r=S.getItem('sw_r')==='1';
-  var ts=parseInt(S.getItem('sw_ts')||'0',10);
-  if(e>0){elapsed=e;if(r&&ts>0)elapsed+=Math.max(0,Date.now()-ts);}
-})();
+// ── In-memory state (loaded from Firestore on each sign-in) ──────────────
+var sessions   = [];
+var goalTitle  = '';
+var goalH      = 8;
+var pw         = '';
 
-// QUOTES
-var QUOTES=[
+// ── Timer state ───────────────────────────────────────────────────────────
+var elapsed = 0, tsStart = null, running = false, raf = null, wl = null;
+
+// ── Dashboard state ───────────────────────────────────────────────────────
+var selDay = null, curView = 'week', moOff = 0;
+var DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+var CIRC = 2 * Math.PI * 105;
+
+// ── Firestore document references ─────────────────────────────────────────
+function profileRef()  { return FB.doc(FB.db,'users',currentUser.uid,'data','profile');  }
+function sessionsRef() { return FB.doc(FB.db,'users',currentUser.uid,'data','sessions'); }
+
+// Merge-write profile fields (non-destructive partial update)
+function saveProfile(fields) {
+  if (!currentUser) return;
+  FB.setDoc(profileRef(), fields, { merge: true })
+    .catch(function(e){ console.warn('Firestore profile write:', e); });
+}
+
+// Overwrite sessions array
+function saveSessions() {
+  if (!currentUser) return;
+  FB.setDoc(sessionsRef(), { sessions: sessions })
+    .catch(function(e){ console.warn('Firestore sessions write:', e); });
+}
+
+// Save running timer state (called on pause / page-hide / visibility-hidden)
+function saveTimer() {
+  saveProfile({ timerElapsed: elapsed, timerRunning: running, timerTs: Date.now() });
+}
+function clearTimerStore() {
+  saveProfile({ timerElapsed: 0, timerRunning: false, timerTs: 0 });
+}
+
+// ── Load all data from Firestore on sign-in ────────────────────────────────
+async function loadUserData() {
+  try {
+    var pSnap = await FB.getDoc(profileRef());
+    if (pSnap.exists()) {
+      var p = pSnap.data();
+      goalTitle = p.title  || '';
+      goalH     = p.goalH  || 8;
+      pw        = p.pw     || '';
+      var savedElapsed = parseFloat(p.timerElapsed || 0);
+      var savedRunning = p.timerRunning === true;
+      var savedTs      = parseInt(p.timerTs || 0, 10);
+      if (savedElapsed > 0) {
+        elapsed = savedElapsed;
+        if (savedRunning && savedTs > 0) elapsed += Math.max(0, Date.now() - savedTs);
+      }
+    }
+    var sSnap = await FB.getDoc(sessionsRef());
+    if (sSnap.exists()) sessions = sSnap.data().sessions || [];
+  } catch(e) {
+    console.warn('Firestore load:', e);
+  }
+}
+
+// ── Quotes ─────────────────────────────────────────────────────────────────
+var QUOTES = [
   {t:"The secret of getting ahead is getting started.",a:"Mark Twain"},
   {t:"It always seems impossible until it's done.",a:"Nelson Mandela"},
   {t:"Don't watch the clock; do what it does — keep going.",a:"Sam Levenson"},
@@ -484,20 +676,18 @@ var QUOTES=[
   {t:"Measuring progress by time spent is the beginning of mastery.",a:"Anonymous"},
 ];
 
-// HELPERS
+// ── Helpers ────────────────────────────────────────────────────────────────
 function pad(n,l){l=l||2;return String(Math.floor(n)).padStart(l,'0');}
 function fmt(ms,withMs){
   var h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000),
       s=Math.floor((ms%60000)/1000),cs=Math.floor((ms%1000)/10);
   var main=pad(h)+':'+pad(m)+':'+pad(s);
-  if(withMs)return{main:main,ms:'.'+pad(cs)};
-  return main;
+  if(withMs)return{main:main,ms:'.'+pad(cs)};return main;
 }
 function hlabel(h){
   if(h<1/60)return'0m';
   var hh=Math.floor(h),mm=Math.round((h-hh)*60);
-  if(hh===0)return mm+'m';if(mm===0)return hh+'h';
-  return hh+'h '+mm+'m';
+  if(hh===0)return mm+'m';if(mm===0)return hh+'h';return hh+'h '+mm+'m';
 }
 function aggDaily(){
   var m={};
@@ -516,33 +706,20 @@ function lifetimeStats(){
   Object.keys(d).forEach(function(k){total+=d[k];days++;if(d[k]>bestH){bestH=d[k];bestDay=k;}});
   return{total:total,days:days,bestDay:bestDay,bestH:bestH};
 }
-function todayKey(){
-  var n=new Date();return n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());
-}
+function todayKey(){var n=new Date();return n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());}
 
-// STORAGE
-function saveTimer(){
-  S.setItem('sw_e',String(elapsed));
-  S.setItem('sw_r',running?'1':'0');
-  S.setItem('sw_ts',String(Date.now()));
-}
-function clearTimerStore(){S.removeItem('sw_e');S.removeItem('sw_r');S.removeItem('sw_ts');}
+// ── Wake lock ──────────────────────────────────────────────────────────────
+function grabWL(){if('wakeLock'in navigator)navigator.wakeLock.request('screen').then(function(w){wl=w;}).catch(function(){});}
+function dropWL(){if(wl)wl.release().then(function(){wl=null;});}
 
-// WAKE LOCK
-function grabWL(){
-  if('wakeLock' in navigator){navigator.wakeLock.request('screen').then(function(w){wl=w;}).catch(function(){});}
-}
-function dropWL(){if(wl){wl.release().then(function(){wl=null;});}}
-
-// TIMER
+// ── Timer ──────────────────────────────────────────────────────────────────
 function tick(){
   if(!running)return;
   elapsed=Date.now()-tsStart;
   var t=fmt(elapsed,true);
   document.getElementById('clock').textContent=t.main;
   document.getElementById('clock-ms').textContent=t.ms;
-  updateRing();
-  raf=requestAnimationFrame(tick);
+  updateRing();raf=requestAnimationFrame(tick);
 }
 function startTimer(){
   if(running)return;
@@ -553,16 +730,14 @@ function startTimer(){
 }
 function pauseTimer(){
   if(!running)return;
-  cancelAnimationFrame(raf);
-  elapsed=Date.now()-tsStart;running=false;
+  cancelAnimationFrame(raf);elapsed=Date.now()-tsStart;running=false;
   var t=fmt(elapsed,true);
   document.getElementById('chip-time').textContent=t.main+t.ms;
   document.getElementById('chip-status').textContent='Paused';
   saveTimer();dropWL();refreshUI();
 }
 function resetTimer(){
-  cancelAnimationFrame(raf);
-  running=false;elapsed=0;tsStart=null;
+  cancelAnimationFrame(raf);running=false;elapsed=0;tsStart=null;
   document.getElementById('clock').textContent='00:00:00';
   document.getElementById('clock-ms').textContent='.00';
   document.getElementById('chip-time').textContent='–';
@@ -594,7 +769,7 @@ function updateRing(){
   document.getElementById('ring-lbl').textContent=lbl+' / '+goalH+'h goal';
 }
 
-// OVERLAYS
+// ── Overlays ───────────────────────────────────────────────────────────────
 function openOv(id){document.getElementById(id).classList.add('open');}
 function closeOv(id){
   document.getElementById(id).classList.remove('open');
@@ -605,8 +780,7 @@ function checkPW(v){return!pw||v===pw;}
 
 function doReset(){
   if(!pw){resetTimer();showToast('Timer reset','ok');return;}
-  openOv('ov-reset');
-  setTimeout(function(){document.getElementById('reset-pass').focus();},400);
+  openOv('ov-reset');setTimeout(function(){document.getElementById('reset-pass').focus();},400);
 }
 function confirmReset(){
   if(!checkPW(document.getElementById('reset-pass').value)){
@@ -614,13 +788,11 @@ function confirmReset(){
   }
   closeOv('ov-reset');resetTimer();showToast('Timer reset','ok');
 }
-
 function doLog(){
   if(elapsed===0){showToast('Start a session first','err');return;}
   if(running)pauseTimer();
   if(!pw){openLogDay();return;}
-  openOv('ov-logpass');
-  setTimeout(function(){document.getElementById('log-pass').focus();},400);
+  openOv('ov-logpass');setTimeout(function(){document.getElementById('log-pass').focus();},400);
 }
 function confirmLogPass(){
   if(!checkPW(document.getElementById('log-pass').value)){
@@ -632,32 +804,28 @@ function openLogDay(){
   selDay=null;
   document.querySelectorAll('.dpill').forEach(function(p){p.classList.remove('sel');});
   document.getElementById('logday-err').textContent='';
-  var t=fmt(elapsed,true);
-  document.getElementById('dur-preview').textContent=t.main+t.ms;
+  var t=fmt(elapsed,true);document.getElementById('dur-preview').textContent=t.main+t.ms;
   openOv('ov-logday');
 }
 function finalLog(){
   if(!selDay){document.getElementById('logday-err').textContent='Please select a day.';return;}
   var hours=parseFloat((elapsed/3600000).toFixed(4));
   sessions.push({day:selDay,hours:hours,ts:Date.now()});
-  S.setItem('sw_sessions',JSON.stringify(sessions));
+  saveSessions();          // ← Firestore write
   closeOv('ov-logday');resetTimer();
   showToast(selDay+': '+hlabel(hours)+' logged ✓','ok');
 }
-
 function openTitleModal(){
   document.getElementById('title-modal-input').value=goalTitle;
-  openOv('ov-title');
-  setTimeout(function(){document.getElementById('title-modal-input').focus();},400);
+  openOv('ov-title');setTimeout(function(){document.getElementById('title-modal-input').focus();},400);
 }
 function saveGoalTitle(){
   var v=document.getElementById('title-modal-input').value.trim();
-  goalTitle=v;S.setItem('sw_title',goalTitle);
-  closeOv('ov-title');renderTitle();
-  showToast(v?'Goal saved':'Goal cleared','ok');
+  goalTitle=v;saveProfile({title:goalTitle});  // ← Firestore write
+  closeOv('ov-title');renderTitle();showToast(v?'Goal saved':'Goal cleared','ok');
 }
 
-// RENDER
+// ── Render ─────────────────────────────────────────────────────────────────
 function renderTitle(){
   var el=document.getElementById('goal-title'),si=document.getElementById('title-input');
   if(goalTitle){el.textContent=goalTitle;el.classList.remove('ph');}
@@ -680,8 +848,42 @@ function renderSettingsInputs(){
   var gi=document.getElementById('goal-input');if(gi)gi.value=goalH;
   var ti=document.getElementById('title-input');if(ti)ti.value=goalTitle;
 }
+function renderUserBadge(){
+  if(!currentUser)return;
+  var av=document.getElementById('user-avatar');
+  if(currentUser.photoURL){
+    av.innerHTML='<img src="'+currentUser.photoURL+'" alt="">';
+  }else{
+    av.textContent=(currentUser.displayName||currentUser.email||'?')[0].toUpperCase();
+  }
+  var name=currentUser.displayName||'';
+  var email=currentUser.email||'';
+  document.getElementById('user-info-card').textContent=(name?name+' · ':'')+email;
+}
 
-// TABS
+// ── Settings saves ─────────────────────────────────────────────────────────
+function saveTitle(){
+  var v=document.getElementById('title-input').value.trim();
+  goalTitle=v;saveProfile({title:goalTitle});renderTitle();
+  showToast(v?'Goal saved':'Goal cleared','ok');
+}
+function saveGoalSetting(){
+  var v=parseFloat(document.getElementById('goal-input').value);
+  if(!v||v<1||v>16){showToast('Enter 1–16 hours','err');return;}
+  goalH=v;saveProfile({goalH:goalH});updateRing();showToast('Daily goal set to '+v+'h','ok');
+}
+function savePassword(){
+  var np=document.getElementById('new-pass').value.trim();
+  var cp=document.getElementById('confirm-pass').value.trim();
+  var err=document.getElementById('pass-set-err');
+  if(!np){err.textContent='Password cannot be empty.';return;}
+  if(np!==cp){err.textContent='Passwords do not match.';return;}
+  err.textContent='';pw=np;saveProfile({pw:pw});
+  document.getElementById('new-pass').value='';document.getElementById('confirm-pass').value='';
+  renderPassStatus();showToast('Password saved','ok');
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
 function switchTab(name){
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
@@ -692,7 +894,7 @@ function switchTab(name){
   if(name==='settings'){renderPassStatus();renderSettingsInputs();}
 }
 
-// DASHBOARD
+// ── Dashboard ──────────────────────────────────────────────────────────────
 function renderDashboard(){
   var ls=lifetimeStats();
   document.getElementById('lt-total').textContent=ls.total>0?hlabel(ls.total):'—';
@@ -720,8 +922,7 @@ function renderDashboard(){
     else document.getElementById('chart-wrap').innerHTML='<div class="empty"><div class="empty-icon">📈</div>Log a session to see your chart</div>';
   }else{
     nav.style.display='flex';hl.style.display='flex';
-    document.getElementById('chart-title').textContent='Monthly heatmap';
-    renderHeatmap();
+    document.getElementById('chart-title').textContent='Monthly heatmap';renderHeatmap();
   }
   renderLog(map);
 }
@@ -780,8 +981,7 @@ function renderHeatmap(){
     if(h>0)svg+='<text x="'+(x+cs/2)+'" y="'+(y+26)+'" fill="'+(isBest?'#E8B44B':'rgba(232,180,75,.55)')+'" font-size="8" text-anchor="middle" font-family="monospace">'+hlabel(h)+'</text>';
     if(isBest)svg+='<text x="'+(x+cs-3)+'" y="'+(y+11)+'" font-size="9" text-anchor="end">🏆</text>';
   }
-  svg+='</svg>';
-  document.getElementById('chart-wrap').innerHTML=svg;
+  svg+='</svg>';document.getElementById('chart-wrap').innerHTML=svg;
 }
 function renderLog(map){
   document.getElementById('log-list').innerHTML=
@@ -790,29 +990,7 @@ function renderLog(map){
     }).join('')||'';
 }
 
-// SETTINGS
-function saveTitle(){
-  var v=document.getElementById('title-input').value.trim();
-  goalTitle=v;S.setItem('sw_title',goalTitle);renderTitle();
-  showToast(v?'Goal saved':'Goal cleared','ok');
-}
-function saveGoalSetting(){
-  var v=parseFloat(document.getElementById('goal-input').value);
-  if(!v||v<1||v>16){showToast('Enter 1–16 hours','err');return;}
-  goalH=v;S.setItem('sw_goal',v);updateRing();showToast('Daily goal set to '+v+'h','ok');
-}
-function savePassword(){
-  var np=document.getElementById('new-pass').value.trim();
-  var cp=document.getElementById('confirm-pass').value.trim();
-  var err=document.getElementById('pass-set-err');
-  if(!np){err.textContent='Password cannot be empty.';return;}
-  if(np!==cp){err.textContent='Passwords do not match.';return;}
-  err.textContent='';pw=np;S.setItem('sw_pw',pw);
-  document.getElementById('new-pass').value='';document.getElementById('confirm-pass').value='';
-  renderPassStatus();showToast('Password saved','ok');
-}
-
-// SHARE (canvas.toBlob for iOS)
+// ── Share (canvas – unchanged from original) ───────────────────────────────
 function rrp(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
 function fRR(ctx,x,y,w,h,r,f){ctx.fillStyle=f;rrp(ctx,x,y,w,h,r);ctx.fill();}
 function sRR(ctx,x,y,w,h,r,s,lw){ctx.strokeStyle=s;ctx.lineWidth=lw;rrp(ctx,x,y,w,h,r);ctx.stroke();}
@@ -838,18 +1016,12 @@ function shareStats(mode){
   ctx.fillText(mode==='today'?"TODAYS STUDY REPORT":"WEEKLY SUMMARY",62,63);
   ctx.fillStyle='#555';ctx.font='500 19px sans-serif';
   ctx.fillText(nowDate.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),40,112);
-  if(goalTitle){
-    ctx.fillStyle='#E8E8E8';ctx.font='bold 28px sans-serif';
-    var t=goalTitle;while(ctx.measureText(t).width>CW-80&&t.length>5)t=t.slice(0,-1);
-    if(t!==goalTitle)t+='…';ctx.fillText(t,40,152);
-  }
+  if(goalTitle){ctx.fillStyle='#E8E8E8';ctx.font='bold 28px sans-serif';var t=goalTitle;while(ctx.measureText(t).width>CW-80&&t.length>5)t=t.slice(0,-1);if(t!==goalTitle)t+='…';ctx.fillText(t,40,152);}
   var cT=goalTitle?188:142;
   if(mode==='today'){
-    fRR(ctx,40,cT,CW-80,190,20,'#141414');sRR(ctx,40,cT,CW-80,190,20,'#2A2A2A',1.5);
-    fRR(ctx,40,cT,CW-80,4,2,'#E8B44B');
+    fRR(ctx,40,cT,CW-80,190,20,'#141414');sRR(ctx,40,cT,CW-80,190,20,'#2A2A2A',1.5);fRR(ctx,40,cT,CW-80,4,2,'#E8B44B');
     ctx.fillStyle='#555';ctx.font='600 14px sans-serif';ctx.fillText("TODAY'S STUDY TIME",70,cT+44);
-    var hh2=Math.floor(todHours),mm2=Math.round((todHours-hh2)*60);
-    var tS=hh2>0?hh2+'h '+pad(mm2)+'m':mm2+'m';
+    var hh2=Math.floor(todHours),mm2=Math.round((todHours-hh2)*60);var tS=hh2>0?hh2+'h '+pad(mm2)+'m':mm2+'m';
     ctx.fillStyle='#E8B44B';ctx.font='bold 76px sans-serif';ctx.fillText(todHours>0?tS:'—',70,cT+130);
     var tag=todHours>=8?'Outstanding!':todHours>=6?'Great work!':todHours>=4?'Solid session!':todHours>=2?'Good progress!':todHours>0?'Keep going!':'No log yet today';
     ctx.fillStyle='#555';ctx.font='600 18px sans-serif';ctx.fillText(tag,70,cT+172);
@@ -858,20 +1030,13 @@ function shareStats(mode){
   var wS=mode==='week'
     ?[{label:'WEEKLY AVG',val:avg>0?hlabel(avg):'—',color:'#E8B44B'},{label:'LIFETIME',val:ls.total>0?hlabel(ls.total):'—',color:'#aaa'},{label:'BEST DAY',val:ls.bestH>0?hlabel(ls.bestH):'—',color:'#E8B44B'}]
     :[{label:'WEEKLY AVG',val:avg>0?hlabel(avg):'—',color:'#E8B44B'},{label:'HIGHEST',val:high>0?hlabel(high):'—',color:'#4ADE80'},{label:'LIFETIME',val:ls.total>0?hlabel(ls.total):'—',color:'#aaa'}];
-  wS.forEach(function(s,i){
-    var x=40+i*(sw+10);fRR(ctx,x,sT,sw,100,14,'#141414');sRR(ctx,x,sT,sw,100,14,'#2A2A2A',1.5);
-    ctx.fillStyle=s.color;ctx.font='bold 26px sans-serif';
-    var tw=ctx.measureText(s.val).width;ctx.fillText(s.val,x+sw/2-tw/2,sT+52);
-    ctx.fillStyle='#444';ctx.font='600 10px sans-serif';
-    var lw=ctx.measureText(s.label).width;ctx.fillText(s.label,x+sw/2-lw/2,sT+78);
-  });
+  wS.forEach(function(s,i){var x=40+i*(sw+10);fRR(ctx,x,sT,sw,100,14,'#141414');sRR(ctx,x,sT,sw,100,14,'#2A2A2A',1.5);ctx.fillStyle=s.color;ctx.font='bold 26px sans-serif';var tw=ctx.measureText(s.val).width;ctx.fillText(s.val,x+sw/2-tw/2,sT+52);ctx.fillStyle='#444';ctx.font='600 10px sans-serif';var lw=ctx.measureText(s.label).width;ctx.fillText(s.label,x+sw/2-lw/2,sT+78);});
   var chT=sT+130,chH=150,chW=CW-80;
   fRR(ctx,40,chT,chW,chH+56,18,'#141414');sRR(ctx,40,chT,chW,chH+56,18,'#2A2A2A',1.5);
   ctx.fillStyle='#333';ctx.font='600 11px sans-serif';ctx.fillText('DAILY BREAKDOWN',70,chT+26);
   var bAT=chT+42,mxV=Math.max.apply(null,vals.concat([0.5])),bW=Math.floor((chW-60)/7)-8;
   DAYS.forEach(function(d,i){
-    var v=map[d]||0,bH=Math.max(4,(v/mxV)*chH);
-    var x=70+i*((chW-60)/7),y=bAT+chH-bH,isT=d===todShort;
+    var v=map[d]||0,bH=Math.max(4,(v/mxV)*chH);var x=70+i*((chW-60)/7),y=bAT+chH-bH,isT=d===todShort;
     if(v>0){var bg=ctx.createLinearGradient(x,y,x,y+bH);bg.addColorStop(0,isT?'#E8B44B':'#8a6a20');bg.addColorStop(1,isT?'rgba(232,180,75,.3)':'rgba(138,106,32,.2)');ctx.fillStyle=bg;}
     else ctx.fillStyle='#1C1C1C';
     rrp(ctx,x,y,bW,bH,5);ctx.fill();
@@ -891,9 +1056,7 @@ function shareStats(mode){
     if(!blob){showToast('Could not create image','err');return;}
     var file=new File([blob],fn,{type:'image/jpeg'});
     if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
-      navigator.share({files:[file],title:goalTitle||'Study Report',text:shareText}).catch(function(e){
-        if(e.name!=='AbortError')dlFallback(canvas,fn,shareText);
-      });
+      navigator.share({files:[file],title:goalTitle||'Study Report',text:shareText}).catch(function(e){if(e.name!=='AbortError')dlFallback(canvas,fn,shareText);});
     }else dlFallback(canvas,fn,shareText);
   },'image/jpeg',0.95);
 }
@@ -903,7 +1066,7 @@ function dlFallback(canvas,fn,shareText){
   setTimeout(function(){window.open('https://wa.me/?text='+encodeURIComponent(shareText),'_blank');},600);
 }
 
-// TOAST
+// ── Toast ──────────────────────────────────────────────────────────────────
 var toastTmr;
 function showToast(msg,type){
   var t=document.getElementById('toast');
@@ -911,116 +1074,137 @@ function showToast(msg,type){
   clearTimeout(toastTmr);toastTmr=setTimeout(function(){t.className='toast';},2800);
 }
 
-// TAP HELPER — works in Safari, Chrome, Instagram, WhatsApp in-app browsers
+// ── Tap helper ─────────────────────────────────────────────────────────────
 function onTap(el,fn){
   if(!el)return;
   var tapped=false,tx=0,ty=0;
-  el.addEventListener('touchstart',function(e){
-    tapped=true;
-    tx=e.touches[0].clientX;ty=e.touches[0].clientY;
-  },{passive:true});
+  el.addEventListener('touchstart',function(e){tapped=true;tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
   el.addEventListener('touchend',function(e){
     if(!tapped)return;
-    var dx=Math.abs(e.changedTouches[0].clientX-tx);
-    var dy=Math.abs(e.changedTouches[0].clientY-ty);
-    tapped=false;
-    if(dx>10||dy>10)return; // was a scroll, not a tap
-    e.preventDefault();
-    fn();
+    var dx=Math.abs(e.changedTouches[0].clientX-tx),dy=Math.abs(e.changedTouches[0].clientY-ty);
+    tapped=false;if(dx>10||dy>10)return;e.preventDefault();fn();
   },{passive:false});
-  el.addEventListener('click',function(){
-    if(tapped){tapped=false;return;}
-    fn();
-  });
+  el.addEventListener('click',function(){if(tapped){tapped=false;return;}fn();});
 }
 
-// BIND EVERYTHING
-onTap(document.getElementById('btn-start'),startTimer);
-onTap(document.getElementById('btn-stop'),pauseTimer);
-onTap(document.getElementById('btn-reset'),doReset);
-onTap(document.getElementById('btn-log'),doLog);
-onTap(document.getElementById('eyebrow'),openTitleModal);
-onTap(document.getElementById('goal-title'),openTitleModal);
-onTap(document.getElementById('tab-timer'),function(){switchTab('timer');});
-onTap(document.getElementById('tab-dash'),function(){switchTab('dash');});
-onTap(document.getElementById('tab-settings'),function(){switchTab('settings');});
-onTap(document.getElementById('vbtn-week'),function(){
-  curView='week';moOff=0;
-  document.getElementById('vbtn-week').classList.add('active');
-  document.getElementById('vbtn-month').classList.remove('active');
-  renderDashboard();
-});
-onTap(document.getElementById('vbtn-month'),function(){
-  curView='month';moOff=0;
-  document.getElementById('vbtn-month').classList.add('active');
-  document.getElementById('vbtn-week').classList.remove('active');
-  renderDashboard();
-});
-onTap(document.getElementById('cnav-prev'),function(){moOff--;renderDashboard();});
-onTap(document.getElementById('cnav-next'),function(){if(moOff<0){moOff++;renderDashboard();}});
-onTap(document.getElementById('btn-share-today'),function(){shareStats('today');});
-onTap(document.getElementById('btn-share-week'),function(){shareStats('week');});
-onTap(document.getElementById('btn-save-title'),saveTitle);
-onTap(document.getElementById('btn-save-goal'),saveGoalSetting);
-onTap(document.getElementById('btn-save-pass'),savePassword);
-onTap(document.getElementById('reset-cancel'),function(){closeOv('ov-reset');});
-onTap(document.getElementById('reset-ok'),confirmReset);
-onTap(document.getElementById('logpass-cancel'),function(){closeOv('ov-logpass');});
-onTap(document.getElementById('logpass-ok'),confirmLogPass);
-onTap(document.getElementById('logday-cancel'),function(){closeOv('ov-logday');});
-onTap(document.getElementById('logday-ok'),finalLog);
-onTap(document.getElementById('title-cancel'),function(){closeOv('ov-title');});
-onTap(document.getElementById('title-ok'),saveGoalTitle);
-document.querySelectorAll('.dpill').forEach(function(p){
-  onTap(p,function(){
-    selDay=p.dataset.day;
-    document.querySelectorAll('.dpill').forEach(function(x){x.classList.remove('sel');});
-    p.classList.add('sel');
-  });
-});
-['ov-reset','ov-logpass','ov-logday','ov-title'].forEach(function(id){
-  document.getElementById(id).addEventListener('click',function(e){if(e.target===this)closeOv(id);});
-});
-document.getElementById('reset-pass').addEventListener('keydown',function(e){if(e.key==='Enter')confirmReset();});
-document.getElementById('log-pass').addEventListener('keydown',function(e){if(e.key==='Enter')confirmLogPass();});
-document.getElementById('title-modal-input').addEventListener('keydown',function(e){if(e.key==='Enter')saveGoalTitle();});
+// ── Screen management ──────────────────────────────────────────────────────
+function showScreen(name){
+  document.getElementById('loading-screen').style.display='none';
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('main-app').style.display='none';
+  if(name==='loading') document.getElementById('loading-screen').style.display='flex';
+  else if(name==='auth') document.getElementById('auth-screen').style.display='flex';
+  else if(name==='app')  document.getElementById('main-app').style.display='flex';
+}
 
-// BACKGROUND / RESUME
-document.addEventListener('visibilitychange',function(){
-  if(document.visibilityState==='hidden'){
-    if(running)elapsed=Date.now()-tsStart;
-    saveTimer();
-    cancelAnimationFrame(raf);
-  }else{
-    if(running){tsStart=Date.now()-elapsed;raf=requestAnimationFrame(tick);}
-    if(wl)grabWL();
+// ── Sign-out toggle on avatar tap ─────────────────────────────────────────
+var soVisible=false;
+function toggleSignout(){
+  soVisible=!soVisible;
+  document.getElementById('signout-btn').classList.toggle('vis',soVisible);
+}
+
+// ── Boot the app UI (called once after first successful data load) ──────────
+function bootApp(){
+  renderTitle();renderPassStatus();renderQuote();refreshUI();updateRing();renderUserBadge();
+
+  // Restore timer if it was running when the page was closed
+  if(running&&elapsed>0){
+    tsStart=Date.now()-elapsed;raf=requestAnimationFrame(tick);
+    document.getElementById('chip-status').textContent='Running';refreshUI();grabWL();
+  }else if(elapsed>0){
+    var rt=fmt(elapsed,true);
+    document.getElementById('clock').textContent=rt.main;
+    document.getElementById('clock-ms').textContent=rt.ms;
+    document.getElementById('chip-time').textContent=rt.main+rt.ms;
+    document.getElementById('chip-status').textContent='Paused';refreshUI();
   }
-});
-window.addEventListener('pagehide',function(){
-  if(running)elapsed=Date.now()-tsStart;
-  saveTimer();
-});
 
-// INIT
-renderTitle();
-renderPassStatus();
-renderQuote();
-refreshUI();
-updateRing();
-// Resume if was running
-if(S.getItem('sw_r')==='1'&&elapsed>0){
-  tsStart=Date.now()-elapsed;running=true;
-  raf=requestAnimationFrame(tick);
-  document.getElementById('chip-status').textContent='Running';
-  refreshUI();grabWL();
-}else if(elapsed>0){
-  var rt=fmt(elapsed,true);
-  document.getElementById('clock').textContent=rt.main;
-  document.getElementById('clock-ms').textContent=rt.ms;
-  document.getElementById('chip-time').textContent=rt.main+rt.ms;
-  document.getElementById('chip-status').textContent='Paused';
-  refreshUI();
+  // Wire all interactions
+  onTap(document.getElementById('btn-start'),startTimer);
+  onTap(document.getElementById('btn-stop'),pauseTimer);
+  onTap(document.getElementById('btn-reset'),doReset);
+  onTap(document.getElementById('btn-log'),doLog);
+  onTap(document.getElementById('eyebrow'),openTitleModal);
+  onTap(document.getElementById('goal-title'),openTitleModal);
+  onTap(document.getElementById('tab-timer'),function(){switchTab('timer');});
+  onTap(document.getElementById('tab-dash'),function(){switchTab('dash');});
+  onTap(document.getElementById('tab-settings'),function(){switchTab('settings');});
+  onTap(document.getElementById('vbtn-week'),function(){curView='week';moOff=0;document.getElementById('vbtn-week').classList.add('active');document.getElementById('vbtn-month').classList.remove('active');renderDashboard();});
+  onTap(document.getElementById('vbtn-month'),function(){curView='month';moOff=0;document.getElementById('vbtn-month').classList.add('active');document.getElementById('vbtn-week').classList.remove('active');renderDashboard();});
+  onTap(document.getElementById('cnav-prev'),function(){moOff--;renderDashboard();});
+  onTap(document.getElementById('cnav-next'),function(){if(moOff<0){moOff++;renderDashboard();}});
+  onTap(document.getElementById('btn-share-today'),function(){shareStats('today');});
+  onTap(document.getElementById('btn-share-week'),function(){shareStats('week');});
+  onTap(document.getElementById('btn-save-title'),saveTitle);
+  onTap(document.getElementById('btn-save-goal'),saveGoalSetting);
+  onTap(document.getElementById('btn-save-pass'),savePassword);
+  onTap(document.getElementById('reset-cancel'),function(){closeOv('ov-reset');});
+  onTap(document.getElementById('reset-ok'),confirmReset);
+  onTap(document.getElementById('logpass-cancel'),function(){closeOv('ov-logpass');});
+  onTap(document.getElementById('logpass-ok'),confirmLogPass);
+  onTap(document.getElementById('logday-cancel'),function(){closeOv('ov-logday');});
+  onTap(document.getElementById('logday-ok'),finalLog);
+  onTap(document.getElementById('title-cancel'),function(){closeOv('ov-title');});
+  onTap(document.getElementById('title-ok'),saveGoalTitle);
+  onTap(document.getElementById('user-avatar'),toggleSignout);
+  onTap(document.getElementById('signout-btn'),function(){FB.signOut(FB.auth).catch(function(){});});
+  document.querySelectorAll('.dpill').forEach(function(p){
+    onTap(p,function(){selDay=p.dataset.day;document.querySelectorAll('.dpill').forEach(function(x){x.classList.remove('sel');});p.classList.add('sel');});
+  });
+  ['ov-reset','ov-logpass','ov-logday','ov-title'].forEach(function(id){
+    document.getElementById(id).addEventListener('click',function(e){if(e.target===this)closeOv(id);});
+  });
+  document.getElementById('reset-pass').addEventListener('keydown',function(e){if(e.key==='Enter')confirmReset();});
+  document.getElementById('log-pass').addEventListener('keydown',function(e){if(e.key==='Enter')confirmLogPass();});
+  document.getElementById('title-modal-input').addEventListener('keydown',function(e){if(e.key==='Enter')saveGoalTitle();});
+
+  // Background / resume
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='hidden'){if(running)elapsed=Date.now()-tsStart;saveTimer();cancelAnimationFrame(raf);}
+    else{if(running){tsStart=Date.now()-elapsed;raf=requestAnimationFrame(tick);}}
+  });
+  window.addEventListener('pagehide',function(){if(running)elapsed=Date.now()-tsStart;saveTimer();});
 }
+
+// ── Firebase auth observer ─────────────────────────────────────────────────
+function initFirebase(){
+  FB = window._FB;
+
+  // Sign-in button
+  onTap(document.getElementById('btn-google-signin'),function(){
+    document.getElementById('auth-err').textContent='';
+    FB.signInWithPopup(FB.auth,FB.provider).catch(function(err){
+      if(err.code!=='auth/popup-closed-by-user')
+        document.getElementById('auth-err').textContent=err.message;
+    });
+  });
+
+  FB.onAuthStateChanged(FB.auth,async function(user){
+    if(user){
+      currentUser=user;
+      showScreen('loading');
+      // Always re-load from Firestore (handles page refresh + account switching)
+      sessions=[]; goalTitle=''; goalH=8; pw=''; elapsed=0; tsStart=null; running=false;
+      cancelAnimationFrame(raf);
+      await loadUserData();
+      showScreen('app');
+      if(!appBooted){appBooted=true;bootApp();}
+      else{renderTitle();renderPassStatus();renderUserBadge();updateRing();}
+    }else{
+      currentUser=null;
+      sessions=[]; goalTitle=''; goalH=8; pw='';
+      elapsed=0; tsStart=null; running=false; cancelAnimationFrame(raf);
+      appBooted=false;
+      showScreen('auth');
+    }
+  });
+}
+
+// Start: show spinner, wait for Firebase module
+showScreen('loading');
+if(window._FB){ initFirebase(); }
+else{ window.addEventListener('fb-ready',initFirebase,{once:true}); }
 </script>
 </body>
 </html>
