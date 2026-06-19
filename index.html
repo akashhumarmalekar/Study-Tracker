@@ -23,13 +23,13 @@
 
   // ── PASTE YOUR CONFIG HERE ─────────────────────────────────────────────
   const firebaseConfig = {
-  apiKey: "AIzaSyDI_b4xE9q9LuSPxT3-QwM1hp3baVdPXew",
-  authDomain: "study-tracker-94224.firebaseapp.com",
-  projectId: "study-tracker-94224",
-  storageBucket: "study-tracker-94224.firebasestorage.app",
-  messagingSenderId: "1071762205150",
-  appId: "1:1071762205150:web:ff286838ced38d81a1554f"
-};
+    apiKey:            "YOUR_API_KEY",
+    authDomain:        "YOUR_AUTH_DOMAIN",
+    projectId:         "YOUR_PROJECT_ID",
+    storageBucket:     "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId:             "YOUR_APP_ID"
+  };
   // ──────────────────────────────────────────────────────────────────────
 
   const app      = initializeApp(firebaseConfig);
@@ -1161,8 +1161,8 @@ function bootApp(){
 
   // Background / resume
   document.addEventListener('visibilitychange',function(){
-    if(document.visibilityState==='hidden'){if(running)elapsed=Date.now()-tsStart;saveTimer();cancelAnimationFrame(raf);}
-    else{if(running){tsStart=Date.now()-elapsed;raf=requestAnimationFrame(tick);}}
+    if(document.visibilityState==='hidden'){if(running){elapsed=Date.now()-tsStart;saveTimer();}cancelAnimationFrame(raf);}
+    else{if(running){raf=requestAnimationFrame(tick);}}
   });
   window.addEventListener('pagehide',function(){if(running)elapsed=Date.now()-tsStart;saveTimer();});
 }
