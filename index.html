@@ -7,6 +7,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Study Tracker">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0C0C0C">
+<meta name="description" content="Track study sessions, goals and stats — works fully offline.">
+
+<!-- ── PWA: manifest + icons ──────────────────────────────────────────── -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      FIREBASE CONFIGURATION
@@ -17,9 +27,13 @@
   import { initializeApp }                     from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
   import { getAuth, GoogleAuthProvider,
            signInWithPopup, signOut,
-           onAuthStateChanged }                from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-  import { getFirestore, doc,
-           getDoc, setDoc }                    from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+           onAuthStateChanged, setPersistence,
+           browserLocalPersistence }           from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import { initializeFirestore, getFirestore,
+           persistentLocalCache,
+           persistentMultipleTabManager,
+           doc, getDoc, setDoc,
+           onSnapshotsInSync }                 from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
   // ── PASTE YOUR CONFIG HERE ─────────────────────────────────────────────
  const firebaseConfig = {
@@ -32,15 +46,36 @@
 };
   // ──────────────────────────────────────────────────────────────────────
 
-  const app      = initializeApp(firebaseConfig);
-  const auth     = getAuth(app);
-  const db       = getFirestore(app);
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  // Keep the user signed in across reloads/reconnects (default for web,
+  // set explicitly so it never silently falls back to session-only auth).
+  setPersistence(auth, browserLocalPersistence).catch(function(e){
+    console.warn('Auth persistence:', e);
+  });
+
+  // Firestore with offline persistence: reads/writes work against a local
+  // IndexedDB cache when there's no network, writes are queued automatically
+  // and flushed to the server the moment connectivity returns. Falls back
+  // to plain in-memory Firestore on browsers that don't support it
+  // (e.g. some private-browsing modes) so the app never hard-fails.
+  var db;
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
+  } catch (e) {
+    console.warn('Persistent cache unavailable, falling back to memory cache:', e);
+    db = getFirestore(app);
+  }
+
   const provider = new GoogleAuthProvider();
 
   // Expose to the classic script below
   window._FB = { auth, db, provider,
                  signInWithPopup, signOut, onAuthStateChanged,
-                 doc, getDoc, setDoc };
+                 doc, getDoc, setDoc, onSnapshotsInSync };
   window.dispatchEvent(new Event('fb-ready'));
 </script>
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -98,6 +133,24 @@ body{
 .btn-google svg{width:20px;height:20px;flex-shrink:0;}
 .auth-note{font-size:11px;color:var(--text3);text-align:center;margin-top:18px;line-height:1.6;}
 .auth-err{font-size:12px;color:var(--red);text-align:center;margin-top:12px;min-height:18px;}
+
+/* ── NET STATUS PILL ─────────────────────────────────────────────────── */
+#net-status{
+  position:fixed;top:calc(10px + env(safe-area-inset-top));left:12px;
+  display:flex;align-items:center;gap:5px;z-index:200;
+  background:var(--surface2);border:1px solid var(--border2);
+  border-radius:20px;padding:5px 10px 5px 8px;
+  font-size:10px;font-weight:700;letter-spacing:.02em;
+  color:var(--text2);
+}
+#net-status .dot{width:6px;height:6px;border-radius:50%;background:var(--text3);flex-shrink:0;}
+#net-status.online .dot{background:var(--green);}
+#net-status.offline .dot{background:var(--red);}
+#net-status.syncing .dot{background:var(--amber);animation:netpulse 1s ease-in-out infinite;}
+@keyframes netpulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+#net-status .spin{display:none;width:9px;height:9px;border:1.5px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;}
+#net-status.syncing .spin{display:block;}
+#net-status.syncing .dot{display:none;}
 
 /* ── USER BADGE ──────────────────────────────────────────────────────── */
 #user-badge{
@@ -332,6 +385,10 @@ svg.linechart,svg.heatmap{width:100%;display:block;}
 
 <!-- MAIN APP (revealed after sign-in) -->
 <div id="main-app">
+
+  <div id="net-status">
+    <span class="dot"></span><span class="spin"></span><span id="net-status-label">…</span>
+  </div>
 
   <div id="user-badge">
     <div id="user-avatar"></div>
@@ -606,18 +663,48 @@ var CIRC = 2 * Math.PI * 105;
 function profileRef()  { return FB.doc(FB.db,'users',currentUser.uid,'data','profile');  }
 function sessionsRef() { return FB.doc(FB.db,'users',currentUser.uid,'data','sessions'); }
 
+// ── Network / sync status pill ──────────────────────────────────────────
+// While offline, a queued Firestore write's Promise simply doesn't resolve
+// until connectivity returns and the write is acknowledged by the server —
+// so tracking in-flight writes here doubles as a "fully synced" signal.
+var pendingWrites = 0;
+function trackWrite(promise) {
+  pendingWrites++; updateNetStatus();
+  promise.then(done, done);
+  function done(){ pendingWrites = Math.max(0, pendingWrites - 1); updateNetStatus(); }
+  return promise;
+}
+function updateNetStatus(){
+  var el = document.getElementById('net-status');
+  var lbl = document.getElementById('net-status-label');
+  if(!el) return;
+  if(!navigator.onLine){
+    el.className = 'offline'; lbl.textContent = 'Offline ⚠';
+  } else if(pendingWrites > 0){
+    el.className = 'syncing'; lbl.textContent = 'Syncing';
+  } else {
+    el.className = 'online'; lbl.textContent = 'Online';
+  }
+}
+window.addEventListener('online', updateNetStatus);
+window.addEventListener('offline', updateNetStatus);
+
 // Merge-write profile fields (non-destructive partial update)
 function saveProfile(fields) {
   if (!currentUser) return;
-  FB.setDoc(profileRef(), fields, { merge: true })
-    .catch(function(e){ console.warn('Firestore profile write:', e); });
+  trackWrite(
+    FB.setDoc(profileRef(), fields, { merge: true })
+      .catch(function(e){ console.warn('Firestore profile write:', e); })
+  );
 }
 
 // Overwrite sessions array
 function saveSessions() {
   if (!currentUser) return;
-  FB.setDoc(sessionsRef(), { sessions: sessions })
-    .catch(function(e){ console.warn('Firestore sessions write:', e); });
+  trackWrite(
+    FB.setDoc(sessionsRef(), { sessions: sessions })
+      .catch(function(e){ console.warn('Firestore sessions write:', e); })
+  );
 }
 
 // Save running timer state (called on pause / page-hide / visibility-hidden)
@@ -1189,6 +1276,7 @@ function initFirebase(){
       cancelAnimationFrame(raf);
       await loadUserData();
       showScreen('app');
+      updateNetStatus();
       if(!appBooted){appBooted=true;bootApp();}
       else{renderTitle();renderPassStatus();renderUserBadge();updateRing();}
     }else{
@@ -1205,6 +1293,17 @@ function initFirebase(){
 showScreen('loading');
 if(window._FB){ initFirebase(); }
 else{ window.addEventListener('fb-ready',initFirebase,{once:true}); }
+</script>
+
+<!-- ── PWA: register service worker (silent, no refresh prompts) ─────────── -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('service-worker.js').catch(function(e){
+        console.warn('Service worker registration failed:', e);
+      });
+    });
+  }
 </script>
 </body>
 </html>
